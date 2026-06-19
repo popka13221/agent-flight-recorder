@@ -26,6 +26,27 @@ The first versions focus on a small CLI that works without cloud services. Later
 versions can add MCP support, richer risk analysis, and UI surfaces for reviewing
 agent sessions.
 
+## Current MVP
+
+The repository currently ships the first CLI skeleton:
+
+```bash
+PYTHONPATH=src python -m agent_flight_recorder.cli --help
+PYTHONPATH=src python -m agent_flight_recorder.cli --version
+```
+
+The planned commands are visible in help output and intentionally return a clear
+"planned but not implemented yet" message until their backing storage and git
+integration are added.
+
+## Development
+
+Run the smoke tests:
+
+```bash
+PYTHONPATH=src python -m pytest -q
+```
+
 ## Principles
 
 - Local-first: project code and session data stay on the developer machine by default.

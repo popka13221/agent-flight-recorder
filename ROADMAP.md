@@ -17,9 +17,9 @@ GitHub.
 
 - [x] Create public GitHub repository.
 - [x] Add project vision.
-- [ ] Add Python packaging metadata.
-- [ ] Add `afr` CLI entrypoint.
-- [ ] Add first smoke tests.
+- [x] Add Python packaging metadata.
+- [x] Add `afr` CLI entrypoint.
+- [x] Add first smoke tests.
 - [ ] Add MIT license.
 
 ## Phase 2: Session Recorder MVP
