@@ -1,0 +1,14 @@
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+build/
+dist/
+htmlcov/
+.coverage
+
+# AgentFlightRecorder local state
+.afr/
