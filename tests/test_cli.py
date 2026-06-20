@@ -48,6 +48,12 @@ def test_start_current_stop_session(tmp_path: Path, monkeypatch, capsys):
     assert stop_exit == 0
     assert "Stopped session 1." in stop_output.out
     assert "Stopped:" in stop_output.out
+    assert main(["timeline"]) == 0
+
+    timeline_output = capsys.readouterr()
+    assert "Timeline for session 1 (stopped)" in timeline_output.out
+    assert "session_started" in timeline_output.out
+    assert "session_stopped" in timeline_output.out
 
 
 def test_current_without_active_session_returns_error(tmp_path: Path, monkeypatch, capsys):
@@ -73,6 +79,28 @@ def test_start_rejects_second_active_session(tmp_path: Path, monkeypatch, capsys
 
     assert exit_code == 1
     assert "already active" in captured.err
+
+
+def test_timeline_rejects_unknown_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["timeline", "--session", "42"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "session 42 was not found" in captured.err
+
+
+def test_timeline_requires_at_least_one_recorded_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["timeline"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "no recorded sessions" in captured.err
 
 
 def init_repo(path: Path) -> None:

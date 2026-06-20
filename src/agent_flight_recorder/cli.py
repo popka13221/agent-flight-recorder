@@ -23,7 +23,7 @@ COMMAND_DESCRIPTIONS = {
     "commit-msg": "suggest a commit message for the current diff",
 }
 
-IMPLEMENTED_COMMANDS = {"start", "current", "stop"}
+IMPLEMENTED_COMMANDS = {"start", "current", "stop", "timeline"}
 
 
 def format_timestamp(value: datetime | None) -> str:
@@ -78,6 +78,26 @@ def run_stop() -> int:
     return 0
 
 
+def run_timeline(session_id: int | None) -> int:
+    store = load_store()
+    session = store.get_session(session_id) if session_id is not None else None
+    if session is None and session_id is not None:
+        print(f"afr: session {session_id} was not found", file=sys.stderr)
+        return 1
+
+    if session is None:
+        session = store.get_active_session() or store.get_latest_session()
+    if session is None:
+        print("afr: no recorded sessions", file=sys.stderr)
+        return 1
+
+    print(f"Timeline for session {session.id} ({session.status})")
+    for event in store.list_events(session.id):
+        print(f"{format_timestamp(event.created_at)}  {event.event_type}  {event.detail}")
+
+    return 0
+
+
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
@@ -97,6 +117,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", metavar="command")
     for command, help_text in COMMAND_DESCRIPTIONS.items():
         command_parser = subparsers.add_parser(command, help=help_text)
+        if command == "timeline":
+            command_parser.add_argument(
+                "--session",
+                dest="session_id",
+                type=int,
+                help="show events for a specific session id",
+            )
         command_parser.set_defaults(command=command)
 
     return parser
@@ -114,6 +141,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_current()
             if args.command == "stop":
                 return run_stop()
+            if args.command == "timeline":
+                return run_timeline(args.session_id)
             if args.command not in IMPLEMENTED_COMMANDS:
                 return run_planned_command(args.command)
         except RepoResolutionError as error:
