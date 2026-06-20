@@ -20,15 +20,15 @@ GitHub.
 - [x] Add Python packaging metadata.
 - [x] Add `afr` CLI entrypoint.
 - [x] Add first smoke tests.
-- [ ] Add MIT license.
+- [x] Add MIT license.
 
 ## Phase 2: Session Recorder MVP
 
-- [ ] Add SQLite-backed session store.
-- [ ] Implement `afr start`.
-- [ ] Implement `afr current`.
-- [ ] Implement `afr stop`.
-- [ ] Implement `afr timeline`.
+- [x] Add SQLite-backed session store.
+- [x] Implement `afr start`.
+- [x] Implement `afr current`.
+- [x] Implement `afr stop`.
+- [x] Implement `afr timeline`.
 
 ## Phase 3: Git Snapshot Engine
 

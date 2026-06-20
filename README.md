@@ -15,11 +15,9 @@ be able to answer three questions quickly:
 
 ```bash
 afr start
-afr status
-afr run "pytest"
+afr current
 afr timeline
-afr report --md
-afr commit-msg
+afr stop
 ```
 
 The first versions focus on a small CLI that works without cloud services. Later
@@ -28,16 +26,22 @@ agent sessions.
 
 ## Current MVP
 
-The repository currently ships the first CLI skeleton:
+The repository currently ships a working local session recorder:
 
 ```bash
 PYTHONPATH=src python -m agent_flight_recorder.cli --help
-PYTHONPATH=src python -m agent_flight_recorder.cli --version
+PYTHONPATH=src python -m agent_flight_recorder.cli start
+PYTHONPATH=src python -m agent_flight_recorder.cli current
+PYTHONPATH=src python -m agent_flight_recorder.cli timeline
+PYTHONPATH=src python -m agent_flight_recorder.cli stop
 ```
 
-The planned commands are visible in help output and intentionally return a clear
-"planned but not implemented yet" message until their backing storage and git
-integration are added.
+Sessions are stored in a repository-local SQLite database at
+`.afr/flight_recorder.db`. Today the recorder captures session lifecycle events;
+git snapshots, command logging, and reports are the next layers on top.
+
+Commands that have not reached implementation yet still return a clear
+"planned but not implemented yet" message.
 
 ## Development
 
@@ -56,10 +60,10 @@ PYTHONPATH=src python -m pytest -q
 
 ## Status
 
-This repository is at the first implementation stage. The initial milestone is a
-working Python CLI with session storage, git snapshots, command logging, and
-Markdown reports.
+This repository now has the first usable recorder milestone: a Python CLI with
+repository discovery, SQLite-backed session storage, and timeline output. The
+next milestone is git snapshot capture and status summaries for active sessions.
 
 ## License
 
-MIT license planned.
+MIT
