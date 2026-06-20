@@ -9,7 +9,14 @@ from pathlib import Path
 import sys
 
 from agent_flight_recorder import __version__
-from agent_flight_recorder.repo import RepoResolutionError, resolve_repo_root
+from agent_flight_recorder.repo import (
+    GitDiffStat,
+    GitFileChange,
+    RepoResolutionError,
+    list_file_changes,
+    read_diff_stat,
+    resolve_repo_root,
+)
 from agent_flight_recorder.store import ActiveSessionError, NoActiveSessionError, RecorderStore, SessionRecord
 
 
@@ -18,12 +25,13 @@ COMMAND_DESCRIPTIONS = {
     "current": "show the active recording session",
     "stop": "stop the active recording session",
     "status": "show repository and session status",
+    "snapshot": "record the current git worktree state",
     "timeline": "show recorded session events",
     "report": "write a session report",
     "commit-msg": "suggest a commit message for the current diff",
 }
 
-IMPLEMENTED_COMMANDS = {"start", "current", "stop", "timeline"}
+IMPLEMENTED_COMMANDS = {"start", "current", "stop", "status", "snapshot", "timeline"}
 
 
 def format_timestamp(value: datetime | None) -> str:
@@ -53,6 +61,13 @@ def load_store() -> RecorderStore:
     return RecorderStore.open_for_repo(repo_root)
 
 
+def load_repo_context() -> tuple[Path, RecorderStore]:
+    """Resolve the current repository and store together."""
+
+    repo_root = resolve_repo_root()
+    return repo_root, RecorderStore.open_for_repo(repo_root)
+
+
 def run_start() -> int:
     store = load_store()
     session = store.start_session()
@@ -75,6 +90,51 @@ def run_stop() -> int:
     store = load_store()
     session = store.stop_active_session()
     write_session_summary("Stopped", session, store.db_path)
+    return 0
+
+
+def run_status() -> int:
+    repo_root, store = load_repo_context()
+    session = store.get_active_session()
+    changes = list_file_changes(repo_root)
+    diff_stat = read_diff_stat(repo_root)
+    latest_snapshot = store.get_latest_snapshot(session.id) if session else None
+
+    print(f"Repo: {repo_root}")
+    print(f"Active session: {session.id if session else '-'}")
+    print(f"Files changed: {len(changes)}")
+    print(f"Tracked diff: +{diff_stat.additions}/-{diff_stat.deletions}")
+    print(f"Latest snapshot: {latest_snapshot.id if latest_snapshot else '-'}")
+    if changes:
+        print()
+        print("Changes:")
+        for change in changes:
+            print(f"  {change.status_code}  {change.category:<10} {change.path}")
+
+    return 0
+
+
+def run_snapshot() -> int:
+    repo_root, store = load_repo_context()
+    session = store.get_active_session()
+    if session is None:
+        print("afr: no active session", file=sys.stderr)
+        return 1
+
+    changes = list_file_changes(repo_root)
+    diff_stat = read_diff_stat(repo_root)
+    snapshot = store.record_snapshot(
+        session_id=session.id,
+        files_changed=len(changes),
+        additions=diff_stat.additions,
+        deletions=diff_stat.deletions,
+        payload=build_snapshot_payload(changes, diff_stat),
+    )
+
+    print(f"Recorded snapshot {snapshot.id} for session {session.id}.")
+    print(f"Files changed: {snapshot.files_changed}")
+    print(f"Tracked diff: +{snapshot.additions}/-{snapshot.deletions}")
+    print(f"Store: {store.db_path}")
     return 0
 
 
@@ -101,6 +161,27 @@ def run_timeline(session_id: int | None) -> int:
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
+
+
+def build_snapshot_payload(
+    changes: list[GitFileChange],
+    diff_stat: GitDiffStat,
+) -> dict[str, object]:
+    """Build a stable JSON payload for persisted git snapshots."""
+
+    return {
+        "files_changed": len(changes),
+        "additions": diff_stat.additions,
+        "deletions": diff_stat.deletions,
+        "files": [
+            {
+                "path": change.path,
+                "status": change.status_code,
+                "category": change.category,
+            }
+            for change in changes
+        ],
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,6 +222,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_current()
             if args.command == "stop":
                 return run_stop()
+            if args.command == "status":
+                return run_status()
+            if args.command == "snapshot":
+                return run_snapshot()
             if args.command == "timeline":
                 return run_timeline(args.session_id)
             if args.command not in IMPLEMENTED_COMMANDS:

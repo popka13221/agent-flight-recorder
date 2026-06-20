@@ -1,7 +1,12 @@
 from pathlib import Path
 import subprocess
 
-from agent_flight_recorder.repo import categorize_status, list_file_changes, read_diff_stat
+from agent_flight_recorder.repo import (
+    categorize_status,
+    is_internal_state_path,
+    list_file_changes,
+    read_diff_stat,
+)
 
 
 def test_list_file_changes_groups_tracked_and_untracked_files(tmp_path: Path):
@@ -44,6 +49,12 @@ def test_categorize_status_handles_common_porcelain_codes():
     assert categorize_status("A ") == "added"
     assert categorize_status("D ") == "deleted"
     assert categorize_status("R ") == "renamed"
+
+
+def test_internal_state_paths_are_ignored():
+    assert is_internal_state_path(".afr")
+    assert is_internal_state_path(".afr/flight_recorder.db")
+    assert not is_internal_state_path("src/.afr_helper.py")
 
 
 def init_repo(path: Path) -> None:

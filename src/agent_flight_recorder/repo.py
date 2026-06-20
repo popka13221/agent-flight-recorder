@@ -68,6 +68,9 @@ def list_file_changes(repo_root: Path) -> list[GitFileChange]:
 
         status_code = line[:2]
         path = line[3:]
+        if is_internal_state_path(path):
+            continue
+
         changes.append(
             GitFileChange(
                 path=path,
@@ -77,6 +80,12 @@ def list_file_changes(repo_root: Path) -> list[GitFileChange]:
         )
 
     return changes
+
+
+def is_internal_state_path(path: str) -> bool:
+    """Return whether a path belongs to AgentFlightRecorder local state."""
+
+    return path == ".afr" or path.startswith(".afr/")
 
 
 def read_diff_stat(repo_root: Path) -> GitDiffStat:

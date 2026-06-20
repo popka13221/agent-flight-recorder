@@ -17,7 +17,7 @@ def test_help_prints_command_list(capsys):
 
 
 def test_planned_command_exits_with_clear_message(capsys):
-    exit_code = main(["status"])
+    exit_code = main(["report"])
 
     captured = capsys.readouterr()
 
@@ -101,6 +101,52 @@ def test_timeline_requires_at_least_one_recorded_session(tmp_path: Path, monkeyp
 
     assert exit_code == 1
     assert "no recorded sessions" in captured.err
+
+
+def test_status_summarizes_worktree_without_active_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "notes.txt").write_text("draft\n", encoding="utf-8")
+
+    exit_code = main(["status"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert f"Repo: {tmp_path}" in captured.out
+    assert "Active session: -" in captured.out
+    assert "Files changed: 1" in captured.out
+    assert "notes.txt" in captured.out
+
+
+def test_snapshot_requires_active_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["snapshot"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "no active session" in captured.err
+
+
+def test_snapshot_records_worktree_state_in_timeline(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "notes.txt").write_text("draft\n", encoding="utf-8")
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+
+    exit_code = main(["snapshot"])
+    snapshot_output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Recorded snapshot 1 for session 1." in snapshot_output.out
+    assert "Files changed: 1" in snapshot_output.out
+
+    assert main(["timeline"]) == 0
+    timeline_output = capsys.readouterr()
+    assert "snapshot_recorded" in timeline_output.out
 
 
 def init_repo(path: Path) -> None:
