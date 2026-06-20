@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sqlite3
 
@@ -53,6 +54,19 @@ class EventRecord:
     event_type: str
     created_at: datetime
     detail: str
+
+
+@dataclass(frozen=True)
+class SnapshotRecord:
+    """A persisted git worktree snapshot."""
+
+    id: int
+    session_id: int
+    created_at: datetime
+    files_changed: int
+    additions: int
+    deletions: int
+    payload: dict[str, object]
 
 
 class ActiveSessionError(RuntimeError):
@@ -116,6 +130,16 @@ class RecorderStore:
                     detail TEXT NOT NULL DEFAULT ''
                 );
 
+                CREATE TABLE IF NOT EXISTS snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    created_at TEXT NOT NULL,
+                    files_changed INTEGER NOT NULL,
+                    additions INTEGER NOT NULL,
+                    deletions INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_sessions_repo_started_at
                     ON sessions(repo_root, started_at DESC);
 
@@ -124,6 +148,9 @@ class RecorderStore:
 
                 CREATE INDEX IF NOT EXISTS idx_events_session_created_at
                     ON events(session_id, created_at, id);
+
+                CREATE INDEX IF NOT EXISTS idx_snapshots_session_created_at
+                    ON snapshots(session_id, created_at DESC, id DESC);
                 """
             )
 
@@ -250,6 +277,103 @@ class RecorderStore:
 
         return [self._row_to_event(row) for row in rows]
 
+    def record_snapshot(
+        self,
+        *,
+        session_id: int,
+        files_changed: int,
+        additions: int,
+        deletions: int,
+        payload: dict[str, object],
+    ) -> SnapshotRecord:
+        """Persist a git snapshot and emit an event for the session timeline."""
+
+        timestamp = utc_now()
+        payload_json = json.dumps(payload, sort_keys=True)
+        detail = f"{files_changed} files changed, +{additions}/-{deletions}"
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO snapshots(
+                    session_id,
+                    created_at,
+                    files_changed,
+                    additions,
+                    deletions,
+                    payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    format_timestamp(timestamp),
+                    files_changed,
+                    additions,
+                    deletions,
+                    payload_json,
+                ),
+            )
+            snapshot_id = int(cursor.lastrowid)
+            connection.execute(
+                """
+                INSERT INTO events(session_id, event_type, created_at, detail)
+                VALUES (?, 'snapshot_recorded', ?, ?)
+                """,
+                (session_id, format_timestamp(timestamp), detail),
+            )
+
+        snapshot = self.get_snapshot(snapshot_id)
+        assert snapshot is not None
+        return snapshot
+
+    def get_snapshot(self, snapshot_id: int) -> SnapshotRecord | None:
+        """Return one snapshot by id."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, session_id, created_at, files_changed, additions, deletions, payload_json
+                FROM snapshots
+                WHERE id = ?
+                """,
+                (snapshot_id,),
+            ).fetchone()
+
+        return self._row_to_snapshot(row) if row else None
+
+    def get_latest_snapshot(self, session_id: int) -> SnapshotRecord | None:
+        """Return the newest snapshot for a session."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, session_id, created_at, files_changed, additions, deletions, payload_json
+                FROM snapshots
+                WHERE session_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+
+        return self._row_to_snapshot(row) if row else None
+
+    def list_snapshots(self, session_id: int) -> list[SnapshotRecord]:
+        """Return snapshots for a session from newest to oldest."""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, session_id, created_at, files_changed, additions, deletions, payload_json
+                FROM snapshots
+                WHERE session_id = ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (session_id,),
+            ).fetchall()
+
+        return [self._row_to_snapshot(row) for row in rows]
+
     @staticmethod
     def _row_to_session(row: sqlite3.Row) -> SessionRecord:
         return SessionRecord(
@@ -268,4 +392,16 @@ class RecorderStore:
             event_type=str(row["event_type"]),
             created_at=parse_timestamp(str(row["created_at"])) or utc_now(),
             detail=str(row["detail"]),
+        )
+
+    @staticmethod
+    def _row_to_snapshot(row: sqlite3.Row) -> SnapshotRecord:
+        return SnapshotRecord(
+            id=int(row["id"]),
+            session_id=int(row["session_id"]),
+            created_at=parse_timestamp(str(row["created_at"])) or utc_now(),
+            files_changed=int(row["files_changed"]),
+            additions=int(row["additions"]),
+            deletions=int(row["deletions"]),
+            payload=json.loads(str(row["payload_json"])),
         )
