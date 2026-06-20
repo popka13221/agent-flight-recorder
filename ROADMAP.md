@@ -32,11 +32,11 @@ GitHub.
 
 ## Phase 3: Git Snapshot Engine
 
-- [ ] Parse `git status --porcelain`.
-- [ ] Capture changed files by status.
-- [ ] Capture diff statistics.
-- [ ] Store snapshots per session.
-- [ ] Show `afr status` summary.
+- [x] Parse `git status --porcelain`.
+- [x] Capture changed files by status.
+- [x] Capture diff statistics.
+- [x] Store snapshots per session.
+- [x] Show `afr status` summary.
 
 ## Phase 4: Command Runner
 
