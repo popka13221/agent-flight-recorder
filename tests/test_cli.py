@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import subprocess
 import sys
 
@@ -18,7 +19,7 @@ def test_help_prints_command_list(capsys):
 
 
 def test_planned_command_exits_with_clear_message(capsys):
-    exit_code = main(["report"])
+    exit_code = main(["commit-msg"])
 
     captured = capsys.readouterr()
 
@@ -241,6 +242,48 @@ def test_run_records_failed_test_command(tmp_path: Path, monkeypatch, capsys):
     assert main(["timeline"]) == 0
     timeline_output = capsys.readouterr()
     assert "command_failed" in timeline_output.out
+
+
+def test_report_requires_recorded_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["report"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "no recorded sessions" in captured.err
+
+
+def test_report_renders_text_markdown_and_json(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+    (tmp_path / "notes.txt").write_text("draft\n", encoding="utf-8")
+    assert main(["snapshot"]) == 0
+    capsys.readouterr()
+    assert main(["run", "--", sys.executable, "-c", "print('ok')"]) == 0
+    capsys.readouterr()
+
+    assert main(["report"]) == 0
+    text_output = capsys.readouterr()
+    assert "Session 1 report" in text_output.out
+    assert "Snapshot 1: 1 files changed" in text_output.out
+    assert "other exit 0" in text_output.out
+
+    assert main(["report", "--md"]) == 0
+    markdown_output = capsys.readouterr()
+    assert "# AgentFlightRecorder Session 1" in markdown_output.out
+    assert "## Next Checks" in markdown_output.out
+
+    assert main(["report", "--json"]) == 0
+    json_output = capsys.readouterr()
+    payload = json.loads(json_output.out)
+    assert payload["session"]["id"] == 1
+    assert payload["snapshot"]["files_changed"] == 1
+    assert payload["commands"][0]["exit_code"] == 0
 
 
 def init_repo(path: Path) -> None:

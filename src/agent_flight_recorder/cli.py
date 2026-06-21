@@ -23,6 +23,12 @@ from agent_flight_recorder.repo import (
     read_diff_stat,
     resolve_repo_root,
 )
+from agent_flight_recorder.reports import (
+    build_session_report,
+    render_json_report,
+    render_markdown_report,
+    render_text_report,
+)
 from agent_flight_recorder.store import (
     ActiveSessionError,
     CommandRecord,
@@ -44,7 +50,16 @@ COMMAND_DESCRIPTIONS = {
     "commit-msg": "suggest a commit message for the current diff",
 }
 
-IMPLEMENTED_COMMANDS = {"start", "current", "stop", "status", "snapshot", "timeline", "run"}
+IMPLEMENTED_COMMANDS = {
+    "start",
+    "current",
+    "stop",
+    "status",
+    "snapshot",
+    "timeline",
+    "run",
+    "report",
+}
 
 
 def format_timestamp(value: datetime | None) -> str:
@@ -217,6 +232,30 @@ def run_command(command_args: Sequence[str]) -> int:
     return execution.exit_code
 
 
+def run_report(session_id: int | None, output_format: str) -> int:
+    repo_root, store = load_repo_context()
+    session = store.get_session(session_id) if session_id is not None else None
+    if session is None and session_id is not None:
+        print(f"afr: session {session_id} was not found", file=sys.stderr)
+        return 1
+
+    if session is None:
+        session = store.get_active_session() or store.get_latest_session()
+    if session is None:
+        print("afr: no recorded sessions", file=sys.stderr)
+        return 1
+
+    report = build_session_report(store, session)
+    if output_format == "markdown":
+        print(render_markdown_report(report, repo_root=repo_root), end="")
+    elif output_format == "json":
+        print(render_json_report(report, repo_root=repo_root), end="")
+    else:
+        print(render_text_report(report, repo_root=repo_root), end="")
+
+    return 0
+
+
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
@@ -280,6 +319,29 @@ def build_parser() -> argparse.ArgumentParser:
                 nargs=argparse.REMAINDER,
                 help="command to execute; prefix with -- when the command uses flags",
             )
+        if command == "report":
+            command_parser.add_argument(
+                "--session",
+                dest="session_id",
+                type=int,
+                help="report on a specific session id",
+            )
+            format_group = command_parser.add_mutually_exclusive_group()
+            format_group.add_argument(
+                "--md",
+                dest="output_format",
+                action="store_const",
+                const="markdown",
+                help="render the report as Markdown",
+            )
+            format_group.add_argument(
+                "--json",
+                dest="output_format",
+                action="store_const",
+                const="json",
+                help="render the report as JSON",
+            )
+            command_parser.set_defaults(output_format="text")
         command_parser.set_defaults(command=command)
 
     return parser
@@ -305,6 +367,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_timeline(args.session_id)
             if args.command == "run":
                 return run_command(args.command_args)
+            if args.command == "report":
+                return run_report(args.session_id, args.output_format)
             if args.command not in IMPLEMENTED_COMMANDS:
                 return run_planned_command(args.command)
         except RepoResolutionError as error:
