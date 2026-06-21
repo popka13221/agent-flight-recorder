@@ -69,6 +69,24 @@ class SnapshotRecord:
     payload: dict[str, object]
 
 
+@dataclass(frozen=True)
+class CommandRecord:
+    """A persisted command execution captured during a session."""
+
+    id: int
+    session_id: int
+    started_at: datetime
+    finished_at: datetime
+    duration_ms: int
+    command_text: str
+    argv: list[str]
+    cwd: Path
+    exit_code: int
+    command_kind: str
+    stdout: str
+    stderr: str
+
+
 class ActiveSessionError(RuntimeError):
     """Raised when starting a session while another one is active."""
 
@@ -140,6 +158,21 @@ class RecorderStore:
                     payload_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS commands (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL,
+                    duration_ms INTEGER NOT NULL,
+                    command_text TEXT NOT NULL,
+                    argv_json TEXT NOT NULL,
+                    cwd TEXT NOT NULL,
+                    exit_code INTEGER NOT NULL,
+                    command_kind TEXT NOT NULL,
+                    stdout_text TEXT NOT NULL,
+                    stderr_text TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_sessions_repo_started_at
                     ON sessions(repo_root, started_at DESC);
 
@@ -151,6 +184,9 @@ class RecorderStore:
 
                 CREATE INDEX IF NOT EXISTS idx_snapshots_session_created_at
                     ON snapshots(session_id, created_at DESC, id DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_commands_session_started_at
+                    ON commands(session_id, started_at DESC, id DESC);
                 """
             )
 
@@ -374,6 +410,213 @@ class RecorderStore:
 
         return [self._row_to_snapshot(row) for row in rows]
 
+    def record_command(
+        self,
+        *,
+        session_id: int,
+        started_at: datetime,
+        finished_at: datetime,
+        duration_ms: int,
+        command_text: str,
+        argv: list[str],
+        cwd: Path,
+        exit_code: int,
+        command_kind: str,
+        stdout: str,
+        stderr: str,
+    ) -> CommandRecord:
+        """Persist a command execution and emit a timeline event."""
+
+        detail = build_command_detail(
+            command_text=command_text,
+            command_kind=command_kind,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+        )
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO commands(
+                    session_id,
+                    started_at,
+                    finished_at,
+                    duration_ms,
+                    command_text,
+                    argv_json,
+                    cwd,
+                    exit_code,
+                    command_kind,
+                    stdout_text,
+                    stderr_text
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    format_timestamp(started_at),
+                    format_timestamp(finished_at),
+                    duration_ms,
+                    command_text,
+                    json.dumps(argv),
+                    str(cwd.resolve()),
+                    exit_code,
+                    command_kind,
+                    stdout,
+                    stderr,
+                ),
+            )
+            command_id = int(cursor.lastrowid)
+            connection.execute(
+                """
+                INSERT INTO events(session_id, event_type, created_at, detail)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    "command_failed" if exit_code != 0 else "command_succeeded",
+                    format_timestamp(finished_at),
+                    detail,
+                ),
+            )
+
+        command = self.get_command(command_id)
+        assert command is not None
+        return command
+
+    def get_command(self, command_id: int) -> CommandRecord | None:
+        """Return one recorded command by id."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    session_id,
+                    started_at,
+                    finished_at,
+                    duration_ms,
+                    command_text,
+                    argv_json,
+                    cwd,
+                    exit_code,
+                    command_kind,
+                    stdout_text,
+                    stderr_text
+                FROM commands
+                WHERE id = ?
+                """,
+                (command_id,),
+            ).fetchone()
+
+        return self._row_to_command(row) if row else None
+
+    def get_latest_command(self, session_id: int) -> CommandRecord | None:
+        """Return the newest recorded command for a session."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    session_id,
+                    started_at,
+                    finished_at,
+                    duration_ms,
+                    command_text,
+                    argv_json,
+                    cwd,
+                    exit_code,
+                    command_kind,
+                    stdout_text,
+                    stderr_text
+                FROM commands
+                WHERE session_id = ?
+                ORDER BY started_at DESC, id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+
+        return self._row_to_command(row) if row else None
+
+    def list_commands(self, session_id: int, *, limit: int | None = None) -> list[CommandRecord]:
+        """Return recorded commands for a session from newest to oldest."""
+
+        query = """
+            SELECT
+                id,
+                session_id,
+                started_at,
+                finished_at,
+                duration_ms,
+                command_text,
+                argv_json,
+                cwd,
+                exit_code,
+                command_kind,
+                stdout_text,
+                stderr_text
+            FROM commands
+            WHERE session_id = ?
+            ORDER BY started_at DESC, id DESC
+        """
+        parameters: tuple[object, ...]
+        if limit is None:
+            parameters = (session_id,)
+        else:
+            query += "\nLIMIT ?"
+            parameters = (session_id, limit)
+
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+
+        return [self._row_to_command(row) for row in rows]
+
+    def list_failed_commands(self, session_id: int, *, limit: int = 5) -> list[CommandRecord]:
+        """Return recent failed commands for a session."""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    session_id,
+                    started_at,
+                    finished_at,
+                    duration_ms,
+                    command_text,
+                    argv_json,
+                    cwd,
+                    exit_code,
+                    command_kind,
+                    stdout_text,
+                    stderr_text
+                FROM commands
+                WHERE session_id = ? AND exit_code != 0
+                ORDER BY started_at DESC, id DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+
+        return [self._row_to_command(row) for row in rows]
+
+    def count_commands(self, session_id: int) -> int:
+        """Return how many commands have been recorded for a session."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS command_count
+                FROM commands
+                WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+
+        assert row is not None
+        return int(row["command_count"])
+
     @staticmethod
     def _row_to_session(row: sqlite3.Row) -> SessionRecord:
         return SessionRecord(
@@ -405,3 +648,34 @@ class RecorderStore:
             deletions=int(row["deletions"]),
             payload=json.loads(str(row["payload_json"])),
         )
+
+    @staticmethod
+    def _row_to_command(row: sqlite3.Row) -> CommandRecord:
+        return CommandRecord(
+            id=int(row["id"]),
+            session_id=int(row["session_id"]),
+            started_at=parse_timestamp(str(row["started_at"])) or utc_now(),
+            finished_at=parse_timestamp(str(row["finished_at"])) or utc_now(),
+            duration_ms=int(row["duration_ms"]),
+            command_text=str(row["command_text"]),
+            argv=list(json.loads(str(row["argv_json"]))),
+            cwd=Path(str(row["cwd"])),
+            exit_code=int(row["exit_code"]),
+            command_kind=str(row["command_kind"]),
+            stdout=str(row["stdout_text"]),
+            stderr=str(row["stderr_text"]),
+        )
+
+
+def build_command_detail(
+    *,
+    command_text: str,
+    command_kind: str,
+    exit_code: int,
+    duration_ms: int,
+) -> str:
+    """Build a stable timeline detail string for one command execution."""
+
+    label = command_kind if command_kind != "other" else "command"
+    outcome = "failed" if exit_code != 0 else "passed"
+    return f"{label} {outcome} (exit {exit_code}, {duration_ms} ms): {command_text}"

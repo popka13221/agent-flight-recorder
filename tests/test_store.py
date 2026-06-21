@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_flight_recorder.store import ActiveSessionError, NoActiveSessionError, RecorderStore
+from agent_flight_recorder.store import ActiveSessionError, NoActiveSessionError, RecorderStore, utc_now
 
 
 def test_store_starts_and_stops_sessions(tmp_path: Path):
@@ -71,3 +71,51 @@ def test_store_records_snapshots_and_timeline_events(tmp_path: Path):
     events = store.list_events(session.id)
     assert [event.event_type for event in events] == ["session_started", "snapshot_recorded"]
     assert events[-1].detail == "2 files changed, +10/-3"
+
+
+def test_store_records_commands_and_failed_command_queries(tmp_path: Path):
+    store = RecorderStore.open_for_repo(tmp_path)
+    session = store.start_session()
+    started_at = utc_now()
+    finished_at = utc_now()
+
+    failed = store.record_command(
+        session_id=session.id,
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=123,
+        command_text="python -m pytest -q",
+        argv=["python", "-m", "pytest", "-q"],
+        cwd=tmp_path,
+        exit_code=1,
+        command_kind="test",
+        stdout="collected 1 item\n",
+        stderr="E   AssertionError\n",
+    )
+    passed = store.record_command(
+        session_id=session.id,
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=45,
+        command_text="ruff check .",
+        argv=["ruff", "check", "."],
+        cwd=tmp_path,
+        exit_code=0,
+        command_kind="check",
+        stdout="All checks passed!\n",
+        stderr="",
+    )
+
+    assert store.count_commands(session.id) == 2
+    assert store.get_command(failed.id) == failed
+    assert store.get_latest_command(session.id) == passed
+    assert store.list_commands(session.id) == [passed, failed]
+    assert store.list_failed_commands(session.id) == [failed]
+
+    events = store.list_events(session.id)
+    assert [event.event_type for event in events] == [
+        "session_started",
+        "command_failed",
+        "command_succeeded",
+    ]
+    assert "python -m pytest -q" in events[1].detail
