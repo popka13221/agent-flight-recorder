@@ -47,10 +47,10 @@ GitHub.
 
 ## Phase 5: Reports
 
-- [ ] Implement terminal report output.
-- [ ] Implement `afr report --md`.
-- [ ] Implement `afr report --json`.
-- [ ] Add suggested next checks.
+- [x] Implement terminal report output.
+- [x] Implement `afr report --md`.
+- [x] Implement `afr report --json`.
+- [x] Add suggested next checks.
 
 ## Phase 6: Commit Intelligence
 

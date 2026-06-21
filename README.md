@@ -20,6 +20,9 @@ afr current
 afr status
 afr snapshot
 afr timeline
+afr report
+afr report --md
+afr report --json
 afr stop
 ```
 
@@ -39,6 +42,9 @@ PYTHONPATH=src python -m agent_flight_recorder.cli current
 PYTHONPATH=src python -m agent_flight_recorder.cli status
 PYTHONPATH=src python -m agent_flight_recorder.cli snapshot
 PYTHONPATH=src python -m agent_flight_recorder.cli timeline
+PYTHONPATH=src python -m agent_flight_recorder.cli report
+PYTHONPATH=src python -m agent_flight_recorder.cli report --md
+PYTHONPATH=src python -m agent_flight_recorder.cli report --json
 PYTHONPATH=src python -m agent_flight_recorder.cli stop
 ```
 
@@ -49,6 +55,9 @@ git worktree snapshots, including changed files and tracked diff statistics.
 duration, stdout, stderr, and a coarse command kind, then surfaces recent
 failures in `afr status` and the session timeline. It ignores its own `.afr/`
 state so recorder data does not pollute reports.
+`afr report` summarizes the session in terminal, Markdown, or JSON form with
+latest snapshot data, command evidence, failed commands, and suggested next
+checks.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
@@ -73,8 +82,8 @@ PYTHONPATH=src python -m pytest -q
 This repository now has the first usable recorder milestones: a Python CLI with
 repository discovery, SQLite-backed session storage, timeline output, worktree
 status summaries, persisted git snapshots, and command logging through
-`afr run`. The next milestone is generating richer terminal and exportable
-session reports.
+`afr run`. It can now generate terminal, Markdown, and JSON session reports.
+The next milestone is commit intelligence through `afr commit-msg`.
 
 ## License
 
