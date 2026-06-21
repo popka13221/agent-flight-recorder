@@ -65,3 +65,31 @@ def test_report_suggests_snapshot_and_command_evidence(tmp_path: Path):
         "Run `afr snapshot` to capture the current worktree state.",
         "Run tests or build checks through `afr run`.",
     ]
+
+
+def test_report_surfaces_failed_commands(tmp_path: Path):
+    store = RecorderStore.open_for_repo(tmp_path)
+    session = store.start_session()
+    timestamp = datetime(2026, 6, 22, 8, 0, tzinfo=timezone.utc)
+    store.record_command(
+        session_id=session.id,
+        started_at=timestamp,
+        finished_at=timestamp,
+        duration_ms=25,
+        command_text="python -m pytest",
+        argv=["python", "-m", "pytest"],
+        cwd=tmp_path,
+        exit_code=2,
+        command_kind="test",
+        stdout="",
+        stderr="failed\n",
+    )
+
+    report = build_session_report(store, session)
+    text = render_text_report(report, repo_root=tmp_path)
+    markdown = render_markdown_report(report, repo_root=tmp_path)
+
+    assert "Failed commands:" in text
+    assert "test exit 2" in text
+    assert "Investigate failed commands before committing or pushing." in text
+    assert "## Failed Commands" in markdown

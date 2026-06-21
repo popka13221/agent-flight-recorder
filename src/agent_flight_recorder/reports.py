@@ -95,6 +95,11 @@ def render_text_report(report: SessionReport, *, repo_root: Path) -> str:
     for command in report.commands[:5]:
         lines.append(format_command_line(command, repo_root=repo_root, markdown=False))
 
+    if report.failed_commands:
+        lines.extend(["", "Failed commands:"])
+        for command in report.failed_commands[:5]:
+            lines.append(format_command_line(command, repo_root=repo_root, markdown=False))
+
     lines.extend(["", "Next checks:"])
     lines.extend(f"  - {suggestion}" for suggestion in report.next_checks)
     return "\n".join(lines) + "\n"
@@ -122,6 +127,11 @@ def render_markdown_report(report: SessionReport, *, repo_root: Path) -> str:
     ]
     for command in report.commands[:10]:
         lines.append(format_command_line(command, repo_root=repo_root, markdown=True))
+
+    if report.failed_commands:
+        lines.extend(["", "## Failed Commands", ""])
+        for command in report.failed_commands[:10]:
+            lines.append(format_command_line(command, repo_root=repo_root, markdown=True))
 
     lines.extend(["", "## Next Checks", ""])
     lines.extend(f"- {suggestion}" for suggestion in report.next_checks)
