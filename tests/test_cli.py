@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+import sys
 
 from agent_flight_recorder.cli import main
 
@@ -23,6 +24,15 @@ def test_planned_command_exits_with_clear_message(capsys):
 
     assert exit_code == 2
     assert "planned but not implemented yet" in captured.err
+
+
+def test_run_requires_a_command(capsys):
+    exit_code = main(["run"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "no command provided" in captured.err
 
 
 def test_start_current_stop_session(tmp_path: Path, monkeypatch, capsys):
@@ -147,6 +157,90 @@ def test_snapshot_records_worktree_state_in_timeline(tmp_path: Path, monkeypatch
     assert main(["timeline"]) == 0
     timeline_output = capsys.readouterr()
     assert "snapshot_recorded" in timeline_output.out
+
+
+def test_run_requires_active_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["run", "--", sys.executable, "-c", "print('hello')"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "no active session" in captured.err
+
+
+def test_run_records_successful_command_and_status_summary(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "run",
+            "--",
+            sys.executable,
+            "-c",
+            "print('stdout line'); import sys; print('stderr line', file=sys.stderr)",
+        ]
+    )
+    run_output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "stdout line" in run_output.out
+    assert "Recorded command 1 for session 1." in run_output.out
+    assert "Kind: other" in run_output.out
+    assert "stderr line" in run_output.err
+
+    assert main(["status"]) == 0
+    status_output = capsys.readouterr()
+    assert "Commands recorded: 1" in status_output.out
+    assert "Latest command: other exit 0" in status_output.out
+
+    assert main(["timeline"]) == 0
+    timeline_output = capsys.readouterr()
+    assert "command_succeeded" in timeline_output.out
+
+
+def test_run_records_failed_test_command(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+
+    exit_code = main(["run", "--", sys.executable, "-m", "pytest", "--version"])
+    run_output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Kind: test" in run_output.out
+
+    exit_code = main(
+        [
+            "run",
+            "--",
+            sys.executable,
+            "-c",
+            "import sys; print('boom', file=sys.stderr); raise SystemExit(3)",
+        ]
+    )
+    failed_output = capsys.readouterr()
+
+    assert exit_code == 3
+    assert "boom" in failed_output.err
+    assert "Exit: 3" in failed_output.out
+
+    assert main(["status"]) == 0
+    status_output = capsys.readouterr()
+    assert "Commands recorded: 2" in status_output.out
+    assert "Recent failed commands:" in status_output.out
+    assert "exit 3" in status_output.out
+
+    assert main(["timeline"]) == 0
+    timeline_output = capsys.readouterr()
+    assert "command_failed" in timeline_output.out
 
 
 def init_repo(path: Path) -> None:

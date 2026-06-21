@@ -9,6 +9,12 @@ from pathlib import Path
 import sys
 
 from agent_flight_recorder import __version__
+from agent_flight_recorder.commands import (
+    InvalidCommandError,
+    execute_command,
+    normalize_command_args,
+    relativize_cwd,
+)
 from agent_flight_recorder.repo import (
     GitDiffStat,
     GitFileChange,
@@ -17,7 +23,13 @@ from agent_flight_recorder.repo import (
     read_diff_stat,
     resolve_repo_root,
 )
-from agent_flight_recorder.store import ActiveSessionError, NoActiveSessionError, RecorderStore, SessionRecord
+from agent_flight_recorder.store import (
+    ActiveSessionError,
+    CommandRecord,
+    NoActiveSessionError,
+    RecorderStore,
+    SessionRecord,
+)
 
 
 COMMAND_DESCRIPTIONS = {
@@ -27,11 +39,12 @@ COMMAND_DESCRIPTIONS = {
     "status": "show repository and session status",
     "snapshot": "record the current git worktree state",
     "timeline": "show recorded session events",
+    "run": "run a command and record its result",
     "report": "write a session report",
     "commit-msg": "suggest a commit message for the current diff",
 }
 
-IMPLEMENTED_COMMANDS = {"start", "current", "stop", "status", "snapshot", "timeline"}
+IMPLEMENTED_COMMANDS = {"start", "current", "stop", "status", "snapshot", "timeline", "run"}
 
 
 def format_timestamp(value: datetime | None) -> str:
@@ -99,17 +112,31 @@ def run_status() -> int:
     changes = list_file_changes(repo_root)
     diff_stat = read_diff_stat(repo_root)
     latest_snapshot = store.get_latest_snapshot(session.id) if session else None
+    command_count = store.count_commands(session.id) if session else 0
+    latest_command = store.get_latest_command(session.id) if session else None
+    failed_commands = store.list_failed_commands(session.id, limit=3) if session else []
 
     print(f"Repo: {repo_root}")
     print(f"Active session: {session.id if session else '-'}")
     print(f"Files changed: {len(changes)}")
     print(f"Tracked diff: +{diff_stat.additions}/-{diff_stat.deletions}")
     print(f"Latest snapshot: {latest_snapshot.id if latest_snapshot else '-'}")
+    print(f"Commands recorded: {command_count}")
+    print(f"Latest command: {format_command_summary(latest_command, repo_root) if latest_command else '-'}")
     if changes:
         print()
         print("Changes:")
         for change in changes:
             print(f"  {change.status_code}  {change.category:<10} {change.path}")
+    if failed_commands:
+        print()
+        print("Recent failed commands:")
+        for command in failed_commands:
+            relative_cwd = relativize_cwd(command.cwd, repo_root)
+            print(
+                f"  exit {command.exit_code:<3} {command.command_kind:<7} {relative_cwd:<10} "
+                f"{command.command_text}"
+            )
 
     return 0
 
@@ -158,6 +185,38 @@ def run_timeline(session_id: int | None) -> int:
     return 0
 
 
+def run_command(command_args: Sequence[str]) -> int:
+    argv = normalize_command_args(command_args)
+    repo_root, store = load_repo_context()
+    session = store.get_active_session()
+    if session is None:
+        print("afr: no active session", file=sys.stderr)
+        return 1
+
+    execution = execute_command(argv, cwd=Path.cwd())
+    record = store.record_command(
+        session_id=session.id,
+        started_at=execution.started_at,
+        finished_at=execution.finished_at,
+        duration_ms=execution.duration_ms,
+        command_text=execution.command_text,
+        argv=execution.argv,
+        cwd=execution.cwd,
+        exit_code=execution.exit_code,
+        command_kind=execution.command_kind,
+        stdout=execution.stdout,
+        stderr=execution.stderr,
+    )
+
+    print()
+    print(f"Recorded command {record.id} for session {session.id}.")
+    print(f"Kind: {record.command_kind}")
+    print(f"Exit: {record.exit_code}")
+    print(f"Duration: {record.duration_ms} ms")
+    print(f"Cwd: {relativize_cwd(record.cwd, repo_root)}")
+    return execution.exit_code
+
+
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
@@ -184,6 +243,16 @@ def build_snapshot_payload(
     }
 
 
+def format_command_summary(command: CommandRecord, repo_root: Path) -> str:
+    """Render one command in a compact status-friendly format."""
+
+    relative_cwd = relativize_cwd(command.cwd, repo_root)
+    return (
+        f"{command.command_kind} exit {command.exit_code} "
+        f"({command.duration_ms} ms, cwd={relative_cwd}): {command.command_text}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="afr",
@@ -204,6 +273,12 @@ def build_parser() -> argparse.ArgumentParser:
                 dest="session_id",
                 type=int,
                 help="show events for a specific session id",
+            )
+        if command == "run":
+            command_parser.add_argument(
+                "command_args",
+                nargs=argparse.REMAINDER,
+                help="command to execute; prefix with -- when the command uses flags",
             )
         command_parser.set_defaults(command=command)
 
@@ -228,9 +303,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_snapshot()
             if args.command == "timeline":
                 return run_timeline(args.session_id)
+            if args.command == "run":
+                return run_command(args.command_args)
             if args.command not in IMPLEMENTED_COMMANDS:
                 return run_planned_command(args.command)
         except RepoResolutionError as error:
+            print(f"afr: {error}", file=sys.stderr)
+            return 2
+        except InvalidCommandError as error:
             print(f"afr: {error}", file=sys.stderr)
             return 2
         except ActiveSessionError as error:
