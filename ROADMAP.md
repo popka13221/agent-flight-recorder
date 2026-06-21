@@ -40,10 +40,10 @@ GitHub.
 
 ## Phase 4: Command Runner
 
-- [ ] Implement `afr run`.
-- [ ] Store command, exit code, duration, stdout, and stderr.
-- [ ] Detect likely test/build commands.
-- [ ] Surface failed commands in reports.
+- [x] Implement `afr run`.
+- [x] Store command, exit code, duration, stdout, and stderr.
+- [x] Detect likely test/build commands.
+- [x] Surface failed commands in reports.
 
 ## Phase 5: Reports
 

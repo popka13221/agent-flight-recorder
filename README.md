@@ -15,6 +15,7 @@ be able to answer three questions quickly:
 
 ```bash
 afr start
+afr run -- python -m pytest -q
 afr current
 afr status
 afr snapshot
@@ -33,6 +34,7 @@ The repository currently ships a working local session recorder:
 ```bash
 PYTHONPATH=src python -m agent_flight_recorder.cli --help
 PYTHONPATH=src python -m agent_flight_recorder.cli start
+PYTHONPATH=src python -m agent_flight_recorder.cli run -- python -m pytest -q
 PYTHONPATH=src python -m agent_flight_recorder.cli current
 PYTHONPATH=src python -m agent_flight_recorder.cli status
 PYTHONPATH=src python -m agent_flight_recorder.cli snapshot
@@ -43,7 +45,10 @@ PYTHONPATH=src python -m agent_flight_recorder.cli stop
 Sessions are stored in a repository-local SQLite database at
 `.afr/flight_recorder.db`. The recorder captures session lifecycle events and
 git worktree snapshots, including changed files and tracked diff statistics.
-It ignores its own `.afr/` state so recorder data does not pollute reports.
+`afr run` executes commands inside the active session, stores exit code,
+duration, stdout, stderr, and a coarse command kind, then surfaces recent
+failures in `afr status` and the session timeline. It ignores its own `.afr/`
+state so recorder data does not pollute reports.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
@@ -67,8 +72,9 @@ PYTHONPATH=src python -m pytest -q
 
 This repository now has the first usable recorder milestones: a Python CLI with
 repository discovery, SQLite-backed session storage, timeline output, worktree
-status summaries, and persisted git snapshots. The next milestone is command
-logging through `afr run`.
+status summaries, persisted git snapshots, and command logging through
+`afr run`. The next milestone is generating richer terminal and exportable
+session reports.
 
 ## License
 
