@@ -54,9 +54,9 @@ GitHub.
 
 ## Phase 6: Commit Intelligence
 
-- [ ] Implement heuristic `afr commit-msg`.
-- [ ] Add Conventional Commit style suggestions.
-- [ ] Generate changelog snippets.
+- [x] Implement heuristic `afr commit-msg`.
+- [x] Add Conventional Commit style suggestions.
+- [x] Generate changelog snippets.
 - [ ] Add optional AI provider integration later.
 
 ## Phase 7: Risk Engine

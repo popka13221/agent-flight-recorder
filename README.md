@@ -23,6 +23,8 @@ afr timeline
 afr report
 afr report --md
 afr report --json
+afr commit-msg
+afr commit-msg --json
 afr stop
 ```
 
@@ -45,6 +47,8 @@ PYTHONPATH=src python -m agent_flight_recorder.cli timeline
 PYTHONPATH=src python -m agent_flight_recorder.cli report
 PYTHONPATH=src python -m agent_flight_recorder.cli report --md
 PYTHONPATH=src python -m agent_flight_recorder.cli report --json
+PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg
+PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg --json
 PYTHONPATH=src python -m agent_flight_recorder.cli stop
 ```
 
@@ -58,9 +62,28 @@ state so recorder data does not pollute reports.
 `afr report` summarizes the session in terminal, Markdown, or JSON form with
 latest snapshot data, command evidence, failed commands, and suggested next
 checks.
+`afr commit-msg` inspects the current diff, combines it with recorded command
+evidence when available, and suggests a conventional commit message plus a
+changelog-ready bullet. JSON output is available for editor or hook
+integrations.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
+
+## Commit Message Workflow
+
+Use `afr commit-msg` near the end of a session to generate a starting point for
+your commit:
+
+```bash
+PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg
+PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg --json
+```
+
+The first version is heuristic by design. It looks at changed file areas such as
+`src/`, `tests/`, docs, and tooling files, then combines that with recorded
+test/build/check outcomes to bias the suggestion toward `feat`, `fix`, `docs`,
+`test`, `refactor`, or `chore`.
 
 ## Development
 
@@ -83,7 +106,8 @@ This repository now has the first usable recorder milestones: a Python CLI with
 repository discovery, SQLite-backed session storage, timeline output, worktree
 status summaries, persisted git snapshots, and command logging through
 `afr run`. It can now generate terminal, Markdown, and JSON session reports.
-The next milestone is commit intelligence through `afr commit-msg`.
+It also suggests heuristic conventional commit messages and changelog snippets
+through `afr commit-msg`. The next milestone is the risk engine.
 
 ## License
 
