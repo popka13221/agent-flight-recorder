@@ -18,13 +18,16 @@ def test_help_prints_command_list(capsys):
     assert "commit-msg" in captured.out
 
 
-def test_planned_command_exits_with_clear_message(capsys):
+def test_commit_msg_requires_repository_changes(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
     exit_code = main(["commit-msg"])
 
     captured = capsys.readouterr()
 
-    assert exit_code == 2
-    assert "planned but not implemented yet" in captured.err
+    assert exit_code == 1
+    assert "no repository changes detected" in captured.err
 
 
 def test_run_requires_a_command(capsys):
@@ -284,6 +287,34 @@ def test_report_renders_text_markdown_and_json(tmp_path: Path, monkeypatch, caps
     assert payload["session"]["id"] == 1
     assert payload["snapshot"]["files_changed"] == 1
     assert payload["commands"][0]["exit_code"] == 0
+
+
+def test_commit_msg_renders_text_and_json(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+
+    source_dir = tmp_path / "src" / "agent_flight_recorder"
+    source_dir.mkdir(parents=True)
+    (source_dir / "commit_messages.py").write_text("FEATURE = True\n", encoding="utf-8")
+
+    assert main(["run", "--", sys.executable, "-m", "pytest", "--version"]) == 0
+    capsys.readouterr()
+
+    assert main(["commit-msg"]) == 0
+    text_output = capsys.readouterr()
+    assert "Primary suggestion:" in text_output.out
+    assert "feat(commit-msg): add commit message suggestions" in text_output.out
+    assert "Warnings:" not in text_output.out
+
+    assert main(["commit-msg", "--json"]) == 0
+    json_output = capsys.readouterr()
+    payload = json.loads(json_output.out)
+    assert payload["primary"]["type"] == "feat"
+    assert payload["primary"]["scope"] == "commit-msg"
+    assert payload["evidence"]["successful_verifications"] == 1
 
 
 def init_repo(path: Path) -> None:

@@ -91,6 +91,10 @@ class CommitMessageReport:
     warnings: list[str]
 
 
+class NoChangesToDescribeError(ValueError):
+    """Raised when commit suggestions are requested for an empty diff."""
+
+
 def build_commit_message_report(
     *,
     changes: list[CommitFileChange],
@@ -101,7 +105,7 @@ def build_commit_message_report(
     """Build commit suggestions from changed files and recorded command evidence."""
 
     if not changes:
-        raise ValueError("no repository changes detected")
+        raise NoChangesToDescribeError("no repository changes detected")
 
     area_counts = count_areas(changes)
     subject = derive_subject(changes, area_counts)
@@ -547,7 +551,11 @@ def list_test_modules(changes: list[CommitFileChange]) -> list[str]:
 def has_added_source_file(changes: list[CommitFileChange]) -> bool:
     """Return whether a source file was newly added."""
 
-    return any(classify_path(change.path) == "source" and "A" in change.status_code for change in changes)
+    return any(
+        classify_path(change.path) == "source"
+        and ("A" in change.status_code or change.status_code == "??")
+        for change in changes
+    )
 
 
 def summarize_change_modes(changes: list[CommitFileChange]) -> str:

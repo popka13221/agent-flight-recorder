@@ -15,6 +15,13 @@ from agent_flight_recorder.commands import (
     normalize_command_args,
     relativize_cwd,
 )
+from agent_flight_recorder.commit_messages import (
+    CommitFileChange,
+    NoChangesToDescribeError,
+    build_commit_message_report,
+    render_json_commit_message_report,
+    render_text_commit_message_report,
+)
 from agent_flight_recorder.repo import (
     GitDiffStat,
     GitFileChange,
@@ -59,6 +66,7 @@ IMPLEMENTED_COMMANDS = {
     "timeline",
     "run",
     "report",
+    "commit-msg",
 }
 
 
@@ -256,6 +264,38 @@ def run_report(session_id: int | None, output_format: str) -> int:
     return 0
 
 
+def run_commit_msg(session_id: int | None, output_format: str) -> int:
+    repo_root, store = load_repo_context()
+    session = store.get_session(session_id) if session_id is not None else None
+    if session is None and session_id is not None:
+        print(f"afr: session {session_id} was not found", file=sys.stderr)
+        return 1
+
+    if session is None:
+        session = store.get_active_session() or store.get_latest_session()
+
+    commands = store.list_commands(session.id) if session is not None else []
+    changes = [to_commit_file_change(change) for change in list_file_changes(repo_root)]
+    diff_stat = read_diff_stat(repo_root)
+    try:
+        report = build_commit_message_report(
+            changes=changes,
+            additions=diff_stat.additions,
+            deletions=diff_stat.deletions,
+            commands=commands,
+        )
+    except NoChangesToDescribeError as error:
+        print(f"afr: {error}", file=sys.stderr)
+        return 1
+
+    if output_format == "json":
+        print(render_json_commit_message_report(report), end="")
+    else:
+        print(render_text_commit_message_report(report), end="")
+
+    return 0
+
+
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
@@ -289,6 +329,16 @@ def format_command_summary(command: CommandRecord, repo_root: Path) -> str:
     return (
         f"{command.command_kind} exit {command.exit_code} "
         f"({command.duration_ms} ms, cwd={relative_cwd}): {command.command_text}"
+    )
+
+
+def to_commit_file_change(change: GitFileChange) -> CommitFileChange:
+    """Convert repository diff entries into commit-intelligence inputs."""
+
+    return CommitFileChange(
+        path=change.path,
+        status_code=change.status_code,
+        category=change.category,
     )
 
 
@@ -342,6 +392,21 @@ def build_parser() -> argparse.ArgumentParser:
                 help="render the report as JSON",
             )
             command_parser.set_defaults(output_format="text")
+        if command == "commit-msg":
+            command_parser.add_argument(
+                "--session",
+                dest="session_id",
+                type=int,
+                help="use command evidence from a specific session id",
+            )
+            command_parser.add_argument(
+                "--json",
+                dest="output_format",
+                action="store_const",
+                const="json",
+                help="render commit suggestions as JSON",
+            )
+            command_parser.set_defaults(output_format="text")
         command_parser.set_defaults(command=command)
 
     return parser
@@ -369,6 +434,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_command(args.command_args)
             if args.command == "report":
                 return run_report(args.session_id, args.output_format)
+            if args.command == "commit-msg":
+                return run_commit_msg(args.session_id, args.output_format)
             if args.command not in IMPLEMENTED_COMMANDS:
                 return run_planned_command(args.command)
         except RepoResolutionError as error:
@@ -377,6 +444,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except InvalidCommandError as error:
             print(f"afr: {error}", file=sys.stderr)
             return 2
+        except NoChangesToDescribeError as error:
+            print(f"afr: {error}", file=sys.stderr)
+            return 1
         except ActiveSessionError as error:
             print(f"afr: session {error.session_id} is already active", file=sys.stderr)
             return 1
