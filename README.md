@@ -59,9 +59,13 @@ git worktree snapshots, including changed files and tracked diff statistics.
 duration, stdout, stderr, and a coarse command kind, then surfaces recent
 failures in `afr status` and the session timeline. It ignores its own `.afr/`
 state so recorder data does not pollute reports.
+The recorder also evaluates the worktree for review risks such as real `.env`
+files, secret-like patterns, security-sensitive paths, large diffs, source
+changes without nearby tests, and manifest changes that skipped an existing
+lockfile update.
 `afr report` summarizes the session in terminal, Markdown, or JSON form with
-latest snapshot data, command evidence, failed commands, and suggested next
-checks.
+latest snapshot data, persisted risk findings, command evidence, failed
+commands, and suggested next checks.
 `afr commit-msg` inspects the current diff, combines it with recorded command
 evidence when available, and suggests a conventional commit message plus a
 changelog-ready bullet. JSON output is available for editor or hook
@@ -85,6 +89,20 @@ The first version is heuristic by design. It looks at changed file areas such as
 test/build/check outcomes to bias the suggestion toward `feat`, `fix`, `docs`,
 `test`, `refactor`, or `chore`.
 
+## Risk Review Workflow
+
+Use the recorder's status and report surfaces before a handoff or push:
+
+```bash
+PYTHONPATH=src python -m agent_flight_recorder.cli status
+PYTHONPATH=src python -m agent_flight_recorder.cli snapshot
+PYTHONPATH=src python -m agent_flight_recorder.cli report --md
+```
+
+`afr status` evaluates the live worktree and prints current risk findings.
+`afr snapshot` persists those findings into the session record, and `afr report`
+replays them later in terminal, Markdown, or JSON output.
+
 ## Development
 
 Run the smoke tests:
@@ -107,7 +125,8 @@ repository discovery, SQLite-backed session storage, timeline output, worktree
 status summaries, persisted git snapshots, and command logging through
 `afr run`. It can now generate terminal, Markdown, and JSON session reports.
 It also suggests heuristic conventional commit messages and changelog snippets
-through `afr commit-msg`. The next milestone is the risk engine.
+through `afr commit-msg`. It now ships the first risk engine pass for local
+review triage. The next milestone is the MCP server.
 
 ## License
 

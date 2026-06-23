@@ -61,11 +61,11 @@ GitHub.
 
 ## Phase 7: Risk Engine
 
-- [ ] Detect secrets and `.env` files.
-- [ ] Flag security-sensitive paths.
-- [ ] Flag large diffs.
-- [ ] Flag source changes without nearby tests.
-- [ ] Flag package file changes without lockfile updates.
+- [x] Detect secrets and `.env` files.
+- [x] Flag security-sensitive paths.
+- [x] Flag large diffs.
+- [x] Flag source changes without nearby tests.
+- [x] Flag package file changes without lockfile updates.
 
 ## Phase 8: MCP Server
 
