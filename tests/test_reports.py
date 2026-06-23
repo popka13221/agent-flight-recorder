@@ -19,7 +19,18 @@ def test_report_renders_snapshot_commands_and_next_checks(tmp_path: Path):
         files_changed=2,
         additions=5,
         deletions=1,
-        payload={"files": [{"path": "README.md", "category": "modified"}]},
+        payload={
+            "files": [{"path": "README.md", "category": "modified"}],
+            "risks": [
+                {
+                    "code": "missing-tests",
+                    "severity": "medium",
+                    "summary": "Source changes do not include nearby test updates.",
+                    "detail": "Review whether changed modules need coverage updates: reports.",
+                    "paths": ["reports"],
+                }
+            ],
+        },
     )
     timestamp = datetime(2026, 6, 22, 8, 0, tzinfo=timezone.utc)
     store.record_command(
@@ -44,14 +55,17 @@ def test_report_renders_snapshot_commands_and_next_checks(tmp_path: Path):
 
     assert "Session 1 report" in text
     assert "Snapshot 1: 2 files changed, +5/-1" in text
+    assert "[medium] Source changes do not include nearby test updates." in text
     assert "test exit 0" in text
-    assert "Review the diff and commit the completed work." in text
+    assert "Review recorder risk findings before handoff." in text
 
     assert "# AgentFlightRecorder Session 1" in markdown
+    assert "## Risks" in markdown
     assert "- `test exit 0" in markdown
 
     assert json_payload["session"]["id"] == 1
     assert json_payload["snapshot"]["files_changed"] == 2
+    assert json_payload["risks"][0]["code"] == "missing-tests"
     assert json_payload["commands"][0]["kind"] == "test"
 
 
@@ -89,6 +103,8 @@ def test_report_surfaces_failed_commands(tmp_path: Path):
     text = render_text_report(report, repo_root=tmp_path)
     markdown = render_markdown_report(report, repo_root=tmp_path)
 
+    assert "Risks:" in text
+    assert "No risk findings." in text
     assert "Failed commands:" in text
     assert "test exit 2" in text
     assert "Investigate failed commands before committing or pushing." in text

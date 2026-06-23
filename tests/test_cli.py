@@ -129,6 +129,7 @@ def test_status_summarizes_worktree_without_active_session(tmp_path: Path, monke
     assert f"Repo: {tmp_path}" in captured.out
     assert "Active session: -" in captured.out
     assert "Files changed: 1" in captured.out
+    assert "Risk findings: 0" in captured.out
     assert "notes.txt" in captured.out
 
 
@@ -157,10 +158,35 @@ def test_snapshot_records_worktree_state_in_timeline(tmp_path: Path, monkeypatch
     assert exit_code == 0
     assert "Recorded snapshot 1 for session 1." in snapshot_output.out
     assert "Files changed: 1" in snapshot_output.out
+    assert "Risk findings: 0" in snapshot_output.out
 
     assert main(["timeline"]) == 0
     timeline_output = capsys.readouterr()
     assert "snapshot_recorded" in timeline_output.out
+
+
+def test_status_and_report_surface_missing_test_risk(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    source_dir = tmp_path / "src" / "agent_flight_recorder"
+    source_dir.mkdir(parents=True)
+    (source_dir / "cli.py").write_text("print('hello')\n", encoding="utf-8")
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+
+    assert main(["status"]) == 0
+    status_output = capsys.readouterr()
+    assert "Risk findings: 1" in status_output.out
+    assert "Source changes do not include nearby test updates." in status_output.out
+
+    assert main(["snapshot"]) == 0
+    capsys.readouterr()
+
+    assert main(["report"]) == 0
+    report_output = capsys.readouterr()
+    assert "Risks:" in report_output.out
+    assert "Review recorder risk findings before handoff." in report_output.out
 
 
 def test_run_requires_active_session(tmp_path: Path, monkeypatch, capsys):

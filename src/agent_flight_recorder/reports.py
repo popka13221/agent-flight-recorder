@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from agent_flight_recorder.commands import relativize_cwd
+from agent_flight_recorder.risks import RiskFinding, findings_from_snapshot_payload
 from agent_flight_recorder.store import CommandRecord, RecorderStore, SessionRecord, SnapshotRecord
 
 
@@ -19,6 +20,7 @@ class SessionReport:
     latest_snapshot: SnapshotRecord | None
     commands: list[CommandRecord]
     failed_commands: list[CommandRecord]
+    risks: list[RiskFinding]
     next_checks: list[str]
 
 
@@ -28,16 +30,19 @@ def build_session_report(store: RecorderStore, session: SessionRecord) -> Sessio
     commands = store.list_commands(session.id)
     failed_commands = [command for command in commands if command.exit_code != 0]
     latest_snapshot = store.get_latest_snapshot(session.id)
+    risks = findings_from_snapshot_payload(latest_snapshot.payload) if latest_snapshot else []
 
     return SessionReport(
         session=session,
         latest_snapshot=latest_snapshot,
         commands=commands,
         failed_commands=failed_commands,
+        risks=risks,
         next_checks=suggest_next_checks(
             latest_snapshot=latest_snapshot,
             commands=commands,
             failed_commands=failed_commands,
+            risks=risks,
         ),
     )
 
@@ -47,12 +52,17 @@ def suggest_next_checks(
     latest_snapshot: SnapshotRecord | None,
     commands: list[CommandRecord],
     failed_commands: list[CommandRecord],
+    risks: list[RiskFinding],
 ) -> list[str]:
     """Suggest useful next verification steps from recorded evidence."""
 
     suggestions: list[str] = []
     if latest_snapshot is None:
         suggestions.append("Run `afr snapshot` to capture the current worktree state.")
+    elif any(risk.severity == "high" for risk in risks):
+        suggestions.append("Resolve high-risk findings before committing or pushing.")
+    elif risks:
+        suggestions.append("Review recorder risk findings before handoff.")
 
     if not commands:
         suggestions.append("Run tests or build checks through `afr run`.")
@@ -88,6 +98,9 @@ def render_text_report(report: SessionReport, *, repo_root: Path) -> str:
         "Snapshot:",
         format_snapshot(report.latest_snapshot),
         "",
+        "Risks:",
+        format_risks(report.risks, markdown=False),
+        "",
         "Commands:",
         f"  Total: {len(report.commands)}",
         f"  Failed: {len(report.failed_commands)}",
@@ -120,6 +133,10 @@ def render_markdown_report(report: SessionReport, *, repo_root: Path) -> str:
         "",
         format_snapshot(report.latest_snapshot, markdown=True),
         "",
+        "## Risks",
+        "",
+        format_risks(report.risks, markdown=True),
+        "",
         "## Commands",
         "",
         f"- Total: `{len(report.commands)}`",
@@ -150,6 +167,7 @@ def render_json_report(report: SessionReport, *, repo_root: Path) -> str:
             "stopped_at": format_timestamp(report.session.stopped_at),
         },
         "snapshot": snapshot_to_dict(report.latest_snapshot),
+        "risks": [risk.to_dict() for risk in report.risks],
         "commands": [
             {
                 "id": command.id,
@@ -189,6 +207,22 @@ def format_command_line(command: CommandRecord, *, repo_root: Path, markdown: bo
         f"({command.duration_ms} ms, cwd={cwd}): {command.command_text}"
     )
     return f"- `{line}`" if markdown else f"  {line}"
+
+
+def format_risks(risks: list[RiskFinding], *, markdown: bool) -> str:
+    """Render risk findings for text or Markdown report output."""
+
+    if not risks:
+        return "- No risk findings." if markdown else "  No risk findings."
+
+    rendered = [
+        f"[{risk.severity}] {risk.summary} {risk.detail}"
+        for risk in risks
+    ]
+    if markdown:
+        return "\n".join(f"- {line}" for line in rendered)
+
+    return "\n".join(f"  {line}" for line in rendered)
 
 
 def snapshot_to_dict(snapshot: SnapshotRecord | None) -> dict[str, object] | None:

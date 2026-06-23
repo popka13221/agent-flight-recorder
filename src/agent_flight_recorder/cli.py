@@ -36,6 +36,7 @@ from agent_flight_recorder.reports import (
     render_markdown_report,
     render_text_report,
 )
+from agent_flight_recorder.risks import RiskFinding, analyze_risks
 from agent_flight_recorder.store import (
     ActiveSessionError,
     CommandRecord,
@@ -134,6 +135,7 @@ def run_status() -> int:
     session = store.get_active_session()
     changes = list_file_changes(repo_root)
     diff_stat = read_diff_stat(repo_root)
+    risks = analyze_risks(repo_root, changes, diff_stat)
     latest_snapshot = store.get_latest_snapshot(session.id) if session else None
     command_count = store.count_commands(session.id) if session else 0
     latest_command = store.get_latest_command(session.id) if session else None
@@ -143,9 +145,15 @@ def run_status() -> int:
     print(f"Active session: {session.id if session else '-'}")
     print(f"Files changed: {len(changes)}")
     print(f"Tracked diff: +{diff_stat.additions}/-{diff_stat.deletions}")
+    print(f"Risk findings: {len(risks)}")
     print(f"Latest snapshot: {latest_snapshot.id if latest_snapshot else '-'}")
     print(f"Commands recorded: {command_count}")
     print(f"Latest command: {format_command_summary(latest_command, repo_root) if latest_command else '-'}")
+    if risks:
+        print()
+        print("Risks:")
+        for risk in risks:
+            print(format_risk_summary(risk))
     if changes:
         print()
         print("Changes:")
@@ -173,17 +181,19 @@ def run_snapshot() -> int:
 
     changes = list_file_changes(repo_root)
     diff_stat = read_diff_stat(repo_root)
+    risks = analyze_risks(repo_root, changes, diff_stat)
     snapshot = store.record_snapshot(
         session_id=session.id,
         files_changed=len(changes),
         additions=diff_stat.additions,
         deletions=diff_stat.deletions,
-        payload=build_snapshot_payload(changes, diff_stat),
+        payload=build_snapshot_payload(changes, diff_stat, risks),
     )
 
     print(f"Recorded snapshot {snapshot.id} for session {session.id}.")
     print(f"Files changed: {snapshot.files_changed}")
     print(f"Tracked diff: +{snapshot.additions}/-{snapshot.deletions}")
+    print(f"Risk findings: {len(risks)}")
     print(f"Store: {store.db_path}")
     return 0
 
@@ -304,6 +314,7 @@ def run_planned_command(command: str) -> int:
 def build_snapshot_payload(
     changes: list[GitFileChange],
     diff_stat: GitDiffStat,
+    risks: list[RiskFinding],
 ) -> dict[str, object]:
     """Build a stable JSON payload for persisted git snapshots."""
 
@@ -311,6 +322,7 @@ def build_snapshot_payload(
         "files_changed": len(changes),
         "additions": diff_stat.additions,
         "deletions": diff_stat.deletions,
+        "risks": [risk.to_dict() for risk in risks],
         "files": [
             {
                 "path": change.path,
@@ -330,6 +342,12 @@ def format_command_summary(command: CommandRecord, repo_root: Path) -> str:
         f"{command.command_kind} exit {command.exit_code} "
         f"({command.duration_ms} ms, cwd={relative_cwd}): {command.command_text}"
     )
+
+
+def format_risk_summary(risk: RiskFinding) -> str:
+    """Render one risk finding for compact status output."""
+
+    return f"  [{risk.severity}] {risk.summary} {risk.detail}"
 
 
 def to_commit_file_change(change: GitFileChange) -> CommitFileChange:
