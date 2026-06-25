@@ -23,7 +23,9 @@ classifiers = [
   "Topic :: Software Development :: Version Control :: Git",
   "Topic :: Utilities",
 ]
-dependencies = []
+dependencies = [
+  "mcp>=1.27,<2",
+]
 
 [project.optional-dependencies]
 dev = [

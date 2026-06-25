@@ -16,6 +16,7 @@ def test_help_prints_command_list(capsys):
     assert "start" in captured.out
     assert "current" in captured.out
     assert "commit-msg" in captured.out
+    assert "mcp" in captured.out
 
 
 def test_commit_msg_requires_repository_changes(tmp_path: Path, monkeypatch, capsys):

@@ -22,6 +22,7 @@ from agent_flight_recorder.commit_messages import (
     render_json_commit_message_report,
     render_text_commit_message_report,
 )
+from agent_flight_recorder.mcp_server import run_mcp_server
 from agent_flight_recorder.repo import (
     GitDiffStat,
     GitFileChange,
@@ -56,6 +57,7 @@ COMMAND_DESCRIPTIONS = {
     "run": "run a command and record its result",
     "report": "write a session report",
     "commit-msg": "suggest a commit message for the current diff",
+    "mcp": "run the AgentFlightRecorder MCP server",
 }
 
 IMPLEMENTED_COMMANDS = {
@@ -68,6 +70,7 @@ IMPLEMENTED_COMMANDS = {
     "run",
     "report",
     "commit-msg",
+    "mcp",
 }
 
 
@@ -306,6 +309,11 @@ def run_commit_msg(session_id: int | None, output_format: str) -> int:
     return 0
 
 
+def run_mcp(repo: str | None, transport: str, host: str, port: int) -> int:
+    repo_root = Path(repo).expanduser().resolve() if repo is not None else None
+    return run_mcp_server(repo_root, transport=transport, host=host, port=port)
+
+
 def run_planned_command(command: str) -> int:
     print(f"afr: command '{command}' is planned but not implemented yet", file=sys.stderr)
     return 2
@@ -425,6 +433,28 @@ def build_parser() -> argparse.ArgumentParser:
                 help="render commit suggestions as JSON",
             )
             command_parser.set_defaults(output_format="text")
+        if command == "mcp":
+            command_parser.add_argument(
+                "--repo",
+                help="serve a specific repository path instead of inferring from the current working directory",
+            )
+            command_parser.add_argument(
+                "--transport",
+                choices=("stdio", "sse", "streamable-http"),
+                default="stdio",
+                help="MCP transport to use (default: stdio)",
+            )
+            command_parser.add_argument(
+                "--host",
+                default="127.0.0.1",
+                help="host to bind when using HTTP-based transports",
+            )
+            command_parser.add_argument(
+                "--port",
+                type=int,
+                default=8000,
+                help="port to bind when using HTTP-based transports",
+            )
         command_parser.set_defaults(command=command)
 
     return parser
@@ -454,6 +484,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_report(args.session_id, args.output_format)
             if args.command == "commit-msg":
                 return run_commit_msg(args.session_id, args.output_format)
+            if args.command == "mcp":
+                return run_mcp(args.repo, args.transport, args.host, args.port)
             if args.command not in IMPLEMENTED_COMMANDS:
                 return run_planned_command(args.command)
         except RepoResolutionError as error:
