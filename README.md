@@ -25,6 +25,7 @@ afr report --md
 afr report --json
 afr commit-msg
 afr commit-msg --json
+afr mcp
 afr stop
 ```
 
@@ -49,6 +50,7 @@ PYTHONPATH=src python -m agent_flight_recorder.cli report --md
 PYTHONPATH=src python -m agent_flight_recorder.cli report --json
 PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg
 PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg --json
+PYTHONPATH=src python -m agent_flight_recorder.cli mcp
 PYTHONPATH=src python -m agent_flight_recorder.cli stop
 ```
 
@@ -70,6 +72,9 @@ commands, and suggested next checks.
 evidence when available, and suggests a conventional commit message plus a
 changelog-ready bullet. JSON output is available for editor or hook
 integrations.
+`afr mcp` runs a read-only MCP server so coding agents can inspect the current
+or latest recorder session, changed files, command history, risk findings, and
+summary checks for the repository.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
@@ -103,6 +108,20 @@ PYTHONPATH=src python -m agent_flight_recorder.cli report --md
 `afr snapshot` persists those findings into the session record, and `afr report`
 replays them later in terminal, Markdown, or JSON output.
 
+## MCP Workflow
+
+Use the MCP server when you want an AI client to read recorder state directly:
+
+```bash
+PYTHONPATH=src python -m agent_flight_recorder.cli mcp
+PYTHONPATH=src python -m agent_flight_recorder.cli mcp --repo /absolute/path/to/repo
+PYTHONPATH=src python -m agent_flight_recorder.cli mcp --transport streamable-http
+```
+
+The initial server is intentionally read-only. It exposes focused tools for the
+current session, changed files, command history, risk findings, and session
+summary so agents can decide what to inspect or verify next.
+
 ## Development
 
 Run the smoke tests:
@@ -126,7 +145,8 @@ status summaries, persisted git snapshots, and command logging through
 `afr run`. It can now generate terminal, Markdown, and JSON session reports.
 It also suggests heuristic conventional commit messages and changelog snippets
 through `afr commit-msg`. It now ships the first risk engine pass for local
-review triage. The next milestone is the MCP server.
+review triage, plus a read-only MCP server for agent-facing repository session
+inspection. The next milestone is a review UI and release automation.
 
 ## License
 

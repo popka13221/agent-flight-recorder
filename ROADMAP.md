@@ -69,10 +69,10 @@ GitHub.
 
 ## Phase 8: MCP Server
 
-- [ ] Expose current session to agents.
-- [ ] Expose changed files and command history.
-- [ ] Expose risk report.
-- [ ] Expose session summary.
+- [x] Expose current session to agents.
+- [x] Expose changed files and command history.
+- [x] Expose risk report.
+- [x] Expose session summary.
 
 ## Phase 9: Review UI
 
