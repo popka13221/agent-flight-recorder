@@ -83,7 +83,7 @@ GitHub.
 ## Phase 10: Release
 
 - [ ] Publish to PyPI.
-- [ ] Add GitHub Actions CI.
-- [ ] Add GitHub release workflow.
-- [ ] Add install examples.
-- [ ] Add contributing guide.
+- [x] Add GitHub Actions CI.
+- [x] Add GitHub release workflow.
+- [x] Add install examples.
+- [x] Add contributing guide.

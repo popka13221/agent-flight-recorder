@@ -1,5 +1,7 @@
 # AgentFlightRecorder
 
+[![CI](https://github.com/popka13221/agent-flight-recorder/actions/workflows/ci.yml/badge.svg)](https://github.com/popka13221/agent-flight-recorder/actions/workflows/ci.yml)
+
 AgentFlightRecorder is a local-first flight recorder for AI coding agent sessions.
 It tracks what changed, which commands ran, what failed, and what should be checked
 before a commit or pull request leaves the machine.
@@ -38,20 +40,39 @@ agent sessions.
 The repository currently ships a working local session recorder:
 
 ```bash
-PYTHONPATH=src python -m agent_flight_recorder.cli --help
-PYTHONPATH=src python -m agent_flight_recorder.cli start
-PYTHONPATH=src python -m agent_flight_recorder.cli run -- python -m pytest -q
-PYTHONPATH=src python -m agent_flight_recorder.cli current
-PYTHONPATH=src python -m agent_flight_recorder.cli status
-PYTHONPATH=src python -m agent_flight_recorder.cli snapshot
-PYTHONPATH=src python -m agent_flight_recorder.cli timeline
-PYTHONPATH=src python -m agent_flight_recorder.cli report
-PYTHONPATH=src python -m agent_flight_recorder.cli report --md
-PYTHONPATH=src python -m agent_flight_recorder.cli report --json
-PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg
-PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg --json
-PYTHONPATH=src python -m agent_flight_recorder.cli mcp
-PYTHONPATH=src python -m agent_flight_recorder.cli stop
+afr --help
+afr start
+afr run -- python -m pytest -q
+afr current
+afr status
+afr snapshot
+afr timeline
+afr report
+afr report --md
+afr report --json
+afr commit-msg
+afr commit-msg --json
+afr mcp
+afr stop
+```
+
+## Installation
+
+PyPI publishing is still on the roadmap. Until then, install from GitHub or a
+local checkout:
+
+```bash
+python -m pip install "git+https://github.com/popka13221/agent-flight-recorder.git"
+afr --help
+```
+
+For local development:
+
+```bash
+git clone https://github.com/popka13221/agent-flight-recorder.git
+cd agent-flight-recorder
+python -m pip install -e ".[dev]"
+afr --help
 ```
 
 Sessions are stored in a repository-local SQLite database at
@@ -85,8 +106,8 @@ Use `afr commit-msg` near the end of a session to generate a starting point for
 your commit:
 
 ```bash
-PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg
-PYTHONPATH=src python -m agent_flight_recorder.cli commit-msg --json
+afr commit-msg
+afr commit-msg --json
 ```
 
 The first version is heuristic by design. It looks at changed file areas such as
@@ -99,9 +120,9 @@ test/build/check outcomes to bias the suggestion toward `feat`, `fix`, `docs`,
 Use the recorder's status and report surfaces before a handoff or push:
 
 ```bash
-PYTHONPATH=src python -m agent_flight_recorder.cli status
-PYTHONPATH=src python -m agent_flight_recorder.cli snapshot
-PYTHONPATH=src python -m agent_flight_recorder.cli report --md
+afr status
+afr snapshot
+afr report --md
 ```
 
 `afr status` evaluates the live worktree and prints current risk findings.
@@ -113,9 +134,9 @@ replays them later in terminal, Markdown, or JSON output.
 Use the MCP server when you want an AI client to read recorder state directly:
 
 ```bash
-PYTHONPATH=src python -m agent_flight_recorder.cli mcp
-PYTHONPATH=src python -m agent_flight_recorder.cli mcp --repo /absolute/path/to/repo
-PYTHONPATH=src python -m agent_flight_recorder.cli mcp --transport streamable-http
+afr mcp
+afr mcp --repo /absolute/path/to/repo
+afr mcp --transport streamable-http
 ```
 
 The initial server is intentionally read-only. It exposes focused tools for the
@@ -124,11 +145,19 @@ summary so agents can decide what to inspect or verify next.
 
 ## Development
 
-Run the smoke tests:
+Run the local checks before pushing:
 
 ```bash
-PYTHONPATH=src python -m pytest -q
+python -m pip install -e ".[dev]"
+python -m ruff check .
+python -m pytest -q
+python -m build
 ```
+
+GitHub Actions runs the same validation on pushes and pull requests, then
+verifies that the built wheel exposes a working `afr` entrypoint. Version tags
+named `v*` also produce release artifacts through the GitHub release workflow.
+See `CONTRIBUTING.md` for the contributor workflow and release checklist.
 
 ## Principles
 
@@ -146,7 +175,9 @@ status summaries, persisted git snapshots, and command logging through
 It also suggests heuristic conventional commit messages and changelog snippets
 through `afr commit-msg`. It now ships the first risk engine pass for local
 review triage, plus a read-only MCP server for agent-facing repository session
-inspection. The next milestone is a review UI and release automation.
+inspection. Release readiness now includes CI, GitHub release packaging, local
+install instructions, and a contributor workflow. The next milestone is a
+review UI.
 
 ## License
 
