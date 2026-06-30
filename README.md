@@ -27,6 +27,7 @@ afr report --md
 afr report --json
 afr commit-msg
 afr commit-msg --json
+afr ui
 afr mcp
 afr stop
 ```
@@ -52,6 +53,7 @@ afr report --md
 afr report --json
 afr commit-msg
 afr commit-msg --json
+afr ui
 afr mcp
 afr stop
 ```
@@ -96,6 +98,8 @@ integrations.
 `afr mcp` runs a read-only MCP server so coding agents can inspect the current
 or latest recorder session, changed files, command history, risk findings, and
 summary checks for the repository.
+`afr ui` renders a compact terminal dashboard for the current or latest session
+without adding a heavy TUI dependency.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
@@ -143,6 +147,19 @@ The initial server is intentionally read-only. It exposes focused tools for the
 current session, changed files, command history, risk findings, and session
 summary so agents can decide what to inspect or verify next.
 
+## Terminal UI Workflow
+
+Use the dependency-free terminal dashboard when you want a fast review surface:
+
+```bash
+afr ui
+afr ui --session 1
+```
+
+The first UI pass focuses on a static session overview: snapshot totals, risk
+findings, recent command evidence, failed command counts, and suggested next
+checks.
+
 ## Development
 
 Run the local checks before pushing:
@@ -176,8 +193,9 @@ It also suggests heuristic conventional commit messages and changelog snippets
 through `afr commit-msg`. It now ships the first risk engine pass for local
 review triage, plus a read-only MCP server for agent-facing repository session
 inspection. Release readiness now includes CI, GitHub release packaging, local
-install instructions, and a contributor workflow. The next milestone is a
-review UI.
+install instructions, and a contributor workflow. It now includes a lightweight
+terminal dashboard through `afr ui`. The next milestone is a local web UI or
+demo recording for README.
 
 ## License
 
