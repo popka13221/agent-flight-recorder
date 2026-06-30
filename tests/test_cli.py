@@ -285,6 +285,17 @@ def test_report_requires_recorded_session(tmp_path: Path, monkeypatch, capsys):
     assert "no recorded sessions" in captured.err
 
 
+def test_ui_requires_recorded_session(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["ui"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "no recorded sessions" in captured.err
+
+
 def test_report_renders_text_markdown_and_json(tmp_path: Path, monkeypatch, capsys):
     init_repo(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -314,6 +325,28 @@ def test_report_renders_text_markdown_and_json(tmp_path: Path, monkeypatch, caps
     assert payload["session"]["id"] == 1
     assert payload["snapshot"]["files_changed"] == 1
     assert payload["commands"][0]["exit_code"] == 0
+
+
+def test_ui_renders_terminal_dashboard(tmp_path: Path, monkeypatch, capsys):
+    init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["start"]) == 0
+    capsys.readouterr()
+    (tmp_path / "notes.txt").write_text("draft\n", encoding="utf-8")
+    assert main(["snapshot"]) == 0
+    capsys.readouterr()
+    assert main(["run", "--", sys.executable, "-c", "print('ok')"]) == 0
+    capsys.readouterr()
+
+    assert main(["ui"]) == 0
+    output = capsys.readouterr()
+
+    assert "AgentFlightRecorder" in output.out
+    assert "Session: 1 (active)" in output.out
+    assert "Snapshot" in output.out
+    assert "Commands" in output.out
+    assert "Next checks" in output.out
 
 
 def test_commit_msg_renders_text_and_json(tmp_path: Path, monkeypatch, capsys):

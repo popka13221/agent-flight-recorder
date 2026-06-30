@@ -45,6 +45,7 @@ from agent_flight_recorder.store import (
     RecorderStore,
     SessionRecord,
 )
+from agent_flight_recorder.terminal_ui import render_terminal_dashboard
 
 
 COMMAND_DESCRIPTIONS = {
@@ -58,6 +59,7 @@ COMMAND_DESCRIPTIONS = {
     "report": "write a session report",
     "commit-msg": "suggest a commit message for the current diff",
     "mcp": "run the AgentFlightRecorder MCP server",
+    "ui": "show a compact terminal dashboard",
 }
 
 IMPLEMENTED_COMMANDS = {
@@ -71,6 +73,7 @@ IMPLEMENTED_COMMANDS = {
     "report",
     "commit-msg",
     "mcp",
+    "ui",
 }
 
 
@@ -277,6 +280,24 @@ def run_report(session_id: int | None, output_format: str) -> int:
     return 0
 
 
+def run_ui(session_id: int | None) -> int:
+    repo_root, store = load_repo_context()
+    session = store.get_session(session_id) if session_id is not None else None
+    if session is None and session_id is not None:
+        print(f"afr: session {session_id} was not found", file=sys.stderr)
+        return 1
+
+    if session is None:
+        session = store.get_active_session() or store.get_latest_session()
+    if session is None:
+        print("afr: no recorded sessions", file=sys.stderr)
+        return 1
+
+    report = build_session_report(store, session)
+    print(render_terminal_dashboard(report, repo_root=repo_root), end="")
+    return 0
+
+
 def run_commit_msg(session_id: int | None, output_format: str) -> int:
     repo_root, store = load_repo_context()
     session = store.get_session(session_id) if session_id is not None else None
@@ -418,6 +439,13 @@ def build_parser() -> argparse.ArgumentParser:
                 help="render the report as JSON",
             )
             command_parser.set_defaults(output_format="text")
+        if command == "ui":
+            command_parser.add_argument(
+                "--session",
+                dest="session_id",
+                type=int,
+                help="show a dashboard for a specific session id",
+            )
         if command == "commit-msg":
             command_parser.add_argument(
                 "--session",
@@ -482,6 +510,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_command(args.command_args)
             if args.command == "report":
                 return run_report(args.session_id, args.output_format)
+            if args.command == "ui":
+                return run_ui(args.session_id)
             if args.command == "commit-msg":
                 return run_commit_msg(args.session_id, args.output_format)
             if args.command == "mcp":
