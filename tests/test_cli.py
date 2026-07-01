@@ -17,6 +17,7 @@ def test_help_prints_command_list(capsys):
     assert "current" in captured.out
     assert "commit-msg" in captured.out
     assert "mcp" in captured.out
+    assert "serve" in captured.out
 
 
 def test_commit_msg_requires_repository_changes(tmp_path: Path, monkeypatch, capsys):
@@ -347,6 +348,18 @@ def test_ui_renders_terminal_dashboard(tmp_path: Path, monkeypatch, capsys):
     assert "Snapshot" in output.out
     assert "Commands" in output.out
     assert "Next checks" in output.out
+
+
+def test_serve_help_shows_web_dashboard_options(capsys):
+    try:
+        main(["serve", "--help"])
+    except SystemExit as error:
+        assert error.code == 0
+
+    output = capsys.readouterr()
+    assert "--host" in output.out
+    assert "--port" in output.out
+    assert "--session" in output.out
 
 
 def test_commit_msg_renders_text_and_json(tmp_path: Path, monkeypatch, capsys):

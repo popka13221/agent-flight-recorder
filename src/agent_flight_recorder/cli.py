@@ -46,6 +46,7 @@ from agent_flight_recorder.store import (
     SessionRecord,
 )
 from agent_flight_recorder.terminal_ui import render_terminal_dashboard
+from agent_flight_recorder.web_ui import serve_web_dashboard
 
 
 COMMAND_DESCRIPTIONS = {
@@ -60,6 +61,7 @@ COMMAND_DESCRIPTIONS = {
     "commit-msg": "suggest a commit message for the current diff",
     "mcp": "run the AgentFlightRecorder MCP server",
     "ui": "show a compact terminal dashboard",
+    "serve": "serve a local web dashboard",
 }
 
 IMPLEMENTED_COMMANDS = {
@@ -74,6 +76,7 @@ IMPLEMENTED_COMMANDS = {
     "commit-msg",
     "mcp",
     "ui",
+    "serve",
 }
 
 
@@ -298,6 +301,14 @@ def run_ui(session_id: int | None) -> int:
     return 0
 
 
+def run_serve(host: str, port: int, session_id: int | None) -> int:
+    repo_root = resolve_repo_root()
+    print(f"Serving AgentFlightRecorder dashboard at http://{host}:{port}")
+    print("Press Ctrl+C to stop.")
+    serve_web_dashboard(repo_root=repo_root, host=host, port=port, session_id=session_id)
+    return 0
+
+
 def run_commit_msg(session_id: int | None, output_format: str) -> int:
     repo_root, store = load_repo_context()
     session = store.get_session(session_id) if session_id is not None else None
@@ -446,6 +457,24 @@ def build_parser() -> argparse.ArgumentParser:
                 type=int,
                 help="show a dashboard for a specific session id",
             )
+        if command == "serve":
+            command_parser.add_argument(
+                "--session",
+                dest="session_id",
+                type=int,
+                help="serve a dashboard for a specific session id",
+            )
+            command_parser.add_argument(
+                "--host",
+                default="127.0.0.1",
+                help="host to bind for the local web dashboard",
+            )
+            command_parser.add_argument(
+                "--port",
+                type=int,
+                default=8765,
+                help="port to bind for the local web dashboard",
+            )
         if command == "commit-msg":
             command_parser.add_argument(
                 "--session",
@@ -512,6 +541,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_report(args.session_id, args.output_format)
             if args.command == "ui":
                 return run_ui(args.session_id)
+            if args.command == "serve":
+                return run_serve(args.host, args.port, args.session_id)
             if args.command == "commit-msg":
                 return run_commit_msg(args.session_id, args.output_format)
             if args.command == "mcp":

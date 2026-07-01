@@ -3,10 +3,86 @@
 from __future__ import annotations
 
 from html import escape
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from agent_flight_recorder.commands import relativize_cwd
 from agent_flight_recorder.reports import SessionReport, format_timestamp
+from agent_flight_recorder.reports import build_session_report
+from agent_flight_recorder.store import RecorderStore
+
+
+def serve_web_dashboard(
+    *,
+    repo_root: Path,
+    host: str,
+    port: int,
+    session_id: int | None,
+) -> None:
+    """Serve the local web dashboard until interrupted."""
+
+    handler = build_dashboard_handler(repo_root=repo_root, session_id=session_id)
+    server = ThreadingHTTPServer((host, port), handler)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+def build_dashboard_handler(
+    *,
+    repo_root: Path,
+    session_id: int | None,
+) -> type[BaseHTTPRequestHandler]:
+    """Build a request handler bound to one repository."""
+
+    resolved_repo = repo_root.resolve()
+
+    class DashboardHandler(BaseHTTPRequestHandler):
+        server_version = "AgentFlightRecorderWeb/0.1"
+
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path not in {"/", "/index.html"}:
+                self.send_error(404, "not found")
+                return
+
+            try:
+                html = load_dashboard_html(resolved_repo, session_id=session_id)
+            except LookupError as error:
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(f"afr: {error}\n".encode("utf-8"))
+                return
+
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    return DashboardHandler
+
+
+def load_dashboard_html(repo_root: Path, *, session_id: int | None) -> str:
+    """Load recorder state and render dashboard HTML."""
+
+    store = RecorderStore.open_for_repo(repo_root)
+    session = store.get_session(session_id) if session_id is not None else None
+    if session is None and session_id is not None:
+        raise LookupError(f"session {session_id} was not found")
+
+    if session is None:
+        session = store.get_active_session() or store.get_latest_session()
+    if session is None:
+        raise LookupError("no recorded sessions")
+
+    report = build_session_report(store, session)
+    return render_web_dashboard(report, repo_root=repo_root)
 
 
 def render_web_dashboard(report: SessionReport, *, repo_root: Path) -> str:
