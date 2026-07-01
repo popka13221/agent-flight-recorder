@@ -77,7 +77,7 @@ GitHub.
 ## Phase 9: Review UI
 
 - [x] Add terminal UI.
-- [ ] Add local web UI.
+- [x] Add local web UI.
 - [ ] Add demo recording for README.
 
 ## Phase 10: Release

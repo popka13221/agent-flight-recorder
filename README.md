@@ -28,6 +28,7 @@ afr report --json
 afr commit-msg
 afr commit-msg --json
 afr ui
+afr serve
 afr mcp
 afr stop
 ```
@@ -54,6 +55,7 @@ afr report --json
 afr commit-msg
 afr commit-msg --json
 afr ui
+afr serve
 afr mcp
 afr stop
 ```
@@ -100,6 +102,7 @@ or latest recorder session, changed files, command history, risk findings, and
 summary checks for the repository.
 `afr ui` renders a compact terminal dashboard for the current or latest session
 without adding a heavy TUI dependency.
+`afr serve` exposes the same review surface in a local read-only web dashboard.
 
 Commands that have not reached implementation yet still return a clear
 "planned but not implemented yet" message.
@@ -159,6 +162,20 @@ afr ui --session 1
 The first UI pass focuses on a static session overview: snapshot totals, risk
 findings, recent command evidence, failed command counts, and suggested next
 checks.
+
+## Local Web UI Workflow
+
+Serve a browser dashboard for local review:
+
+```bash
+afr serve
+afr serve --host 127.0.0.1 --port 8765
+afr serve --session 1
+```
+
+The web UI is intentionally read-only and dependency-free. It uses the standard
+library HTTP server and renders the current or latest session as a compact HTML
+dashboard.
 
 ## Development
 
